@@ -15,13 +15,14 @@ import os
 import random
 import sys
 import time
-
+import re
+import traceback
 
 try:
     import jieba  # just for linting
     import jieba.analyse
     import requests
-    #import yaml
+    # import yaml
     from lxml import etree
     import zhon.hanzi
 except:
@@ -30,14 +31,13 @@ except:
     os.system('pip3 install jieba &> /dev/null')
     os.system('pip3 install zhon &> /dev/null')
     os.system('pip3 install requests &> /dev/null')
-    import jieba 
+    import jieba
     import jieba.analyse
-    #import yaml
+    # import yaml
     from lxml import etree
     import requests
 
 import jdspider
-
 
 # constants
 CONFIG_PATH = './config.yml'
@@ -46,6 +46,7 @@ ORDINARY_SLEEP_SEC = 10
 SUNBW_SLEEP_SEC = 5
 REVIEW_SLEEP_SEC = 10
 SERVICE_RATING_SLEEP_SEC = 15
+PID_PATTERN = '(?<=jd.com/)[(0-9)*?]+'
 
 ## logging with styles
 ## Reference: https://stackoverflow.com/a/384125/12002560
@@ -74,6 +75,7 @@ _FORMATTER_COLORS = {
     'CRITICAL': _COLORS['red']
 }
 
+
 def format_style_seqs(msg, use_style=True):
     if use_style:
         msg = msg.replace('$RESET', _RESET_SEQ)
@@ -85,6 +87,7 @@ def format_style_seqs(msg, use_style=True):
         msg = msg.replace('$BOLD', '')
         msg = msg.replace('$ITALIC', '')
         msg = msg.replace('$UNDERLINED', '')
+
 
 class StyleFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, use_style=True):
@@ -114,7 +117,7 @@ def generation(pname, _class=0, _type=1, opts=None):
     for i, item in enumerate(items):
         opts['logger'].debug('Loop: %d / %d', i + 1, loop_times)
         opts['logger'].debug('Current item: %s', item)
-        spider = jdspider.JDSpider(item,ck)
+        spider = jdspider.JDSpider(item, ck)
         opts['logger'].debug('Successfully created a JDSpider instance')
         # 增加对增值服务的评价鉴别
         if "赠品" in pname or "非实物" in pname or "京服无忧" in pname or "权益" in pname or "非卖品" in pname or "增值服务" in pname:
@@ -141,8 +144,8 @@ def generation(pname, _class=0, _type=1, opts=None):
         name = jieba.analyse.textrank(pname, topK=5, allowPOS='n')[0]
         opts['logger'].debug('Name: %s', name)
     except Exception as e:
-    #    opts['logger'].warning(
-    #        'jieba textrank analysis error: %s, name fallback to "宝贝"', e)
+        #    opts['logger'].warning(
+        #        'jieba textrank analysis error: %s, name fallback to "宝贝"', e)
         name = "宝贝"
     if _class == 1:
         opts['logger'].debug('_class is 1. Directly return name')
@@ -186,17 +189,18 @@ def all_evaluate(opts=None):
             opts['logger'].debug('Loop: %d / %d', i + 1, loop_times)
             na = ev.xpath('a/text()')[0]
             opts['logger'].debug('na: %s', na)
-            #print(ev.xpath('b/text()')[0])
+            # print(ev.xpath('b/text()')[0])
             try:
                 num = ev.xpath('b/text()')[0]
                 opts['logger'].debug('num: %s', num)
             except IndexError:
-                #opts['logger'].warning('Can\'t find num content in XPath, fallback to 0')
+                # opts['logger'].warning('Can\'t find num content in XPath, fallback to 0')
                 num = 0
             N[na] = int(num)
         return N
     except Exception as e:
-        print (e)
+        print(e)
+
 
 # 评价晒单
 def sunbw(N, opts=None):
@@ -229,7 +233,7 @@ def sunbw(N, opts=None):
                 '//*[@id="main"]/div[2]/div[2]/table/tbody')
             opts['logger'].debug('Count of fetched order data: %d', len(elems))
             Order_data.extend(elems)
-        #if len(Order_data) != N['待评价订单']:
+        # if len(Order_data) != N['待评价订单']:
         #    opts['logger'].debug(
         #        'Count of fetched order data doesn\'t equal N["待评价订单"]')
         #    opts['logger'].debug('Clear the list Order_data')
@@ -242,7 +246,7 @@ def sunbw(N, opts=None):
         #            '//*[@id="main"]/div[2]/div[2]/table')
         #        opts['logger'].debug('Count of fetched order data: %d', len(elems))
         #        Order_data.extend(elems)
-    
+
         opts['logger'].info(f"当前共有{N['待评价订单']}个评价。")
         opts['logger'].debug('Commenting on items')
         for i, Order in enumerate(reversed(Order_data)):
@@ -266,8 +270,12 @@ def sunbw(N, opts=None):
             opts['logger'].debug('Total loop times: %d', loop_times1)
             idx = 0
             for oname, pid in zip(oname_data, pid_data):
-                pid = pid.replace('//item.jd.com/', '').replace('.html', '')
-                opts['logger'].info(f'\t开始第{i+1}个订单: {oid}')
+                pid_match = re.findall(PID_PATTERN, pid)
+                if pid_match:
+                    pid = pid_match[0]
+                else:
+                    pid = pid.replace('//item.jd.com/', '').replace('.html', '')
+                opts['logger'].info(f'\t开始第{i + 1}个订单: {oid}')
                 opts['logger'].debug('pid: %s', pid)
                 opts['logger'].debug('oid: %s', oid)
                 xing, Str = generation(oname, opts=opts)
@@ -309,7 +317,7 @@ def sunbw(N, opts=None):
                     imgurl = ''
                     imgurl2 = ''
                 opts['logger'].debug('Image URL: %s', imgurl)
-                
+
                 opts['logger'].info(f'图片：{imgurl + "," + imgurl2}')
                 # 提交晒单
                 opts['logger'].debug('Preparing for commenting')
@@ -320,14 +328,14 @@ def sunbw(N, opts=None):
                 headers['Content-Type'] = 'application/x-www-form-urlencoded'
                 opts['logger'].debug('New header for this request: %s', headers)
                 data = {
-                 'orderId': oid,
-                 'productId': pid,
-                 'score': str(xing),  # 商品几星
-                 'content': bytes(Str, encoding="gbk"),  # 评价内容
-                 'imgs': imgurl + ',' + imgurl2,
-                 'saveStatus': 2,
-                 'anonymousFlag': 1
-                 }
+                    'orderId': oid,
+                    'productId': pid,
+                    'score': str(xing),  # 商品几星
+                    'content': bytes(Str, encoding="gbk"),  # 评价内容
+                    'imgs': imgurl + ',' + imgurl2,
+                    'saveStatus': 2,
+                    'anonymousFlag': 1
+                }
                 opts['logger'].debug('Data: %s', data)
                 if not opts.get('dry_run'):
                     opts['logger'].debug('Sending comment request')
@@ -343,7 +351,8 @@ def sunbw(N, opts=None):
         N['待评价订单'] -= 1
         return N
     except Exception as e:
-        print (e)
+        print(e)
+
 
 # 追评
 def review(N, opts=None):
@@ -377,7 +386,7 @@ def review(N, opts=None):
                 '//*[@id="main"]/div[2]/div[2]/table/tr[@class="tr-bd"]')
             opts['logger'].debug('Count of fetched order data: %d', len(elems))
             Order_data.extend(elems)
-        #if len(Order_data) != N['待追评']:
+        # if len(Order_data) != N['待追评']:
         #    opts['logger'].debug(
         #        'Count of fetched order data doesn\'t equal N["待追评"]')
         #    # NOTE: Need them?
@@ -408,7 +417,7 @@ def review(N, opts=None):
                 "").split('&orderId=')
             opts['logger'].debug('pid: %s', pid)
             opts['logger'].debug('oid: %s', oid)
-            opts['logger'].info(f'\t开始第{i+1}个订单: {oid}')
+            opts['logger'].info(f'\t开始第{i + 1}个订单: {oid}')
             _, context = generation(oname, _type=0, opts=opts)
             opts['logger'].info(f'追评内容：{context}')
             data1 = {
@@ -431,7 +440,8 @@ def review(N, opts=None):
             N['待追评'] -= 1
         return N
     except Exception as e:
-        print (e)
+        print(e)
+
 
 # 服务评价
 def Service_rating(N, opts=None):
@@ -465,19 +475,19 @@ def Service_rating(N, opts=None):
                 '//*[@id="main"]/div[2]/div[2]/table/tbody/tr[@class="tr-bd"]')
             opts['logger'].debug('Count of fetched order data: %d', len(elems))
             Order_data.extend(elems)
-   #    if len(Order_data) != N['服务评价']:
-   #        opts['logger'].debug(
-   #            'Count of fetched order data doesn\'t equal N["服务评价"]')
-   #        opts['logger'].debug('Clear the list Order_data')
-   #        Order_data = []
-   #        opts['logger'].debug('Total loop times: %d', loop_times)
-   #        for idx, i in enumerate(req_et):
-   #            opts['logger'].debug('Loop: %d / %d', idx + 1, loop_times)
-   #            opts['logger'].debug('Fetching order data in another XPath')
-   #            elems = i.xpath(
-   #                '//*[@id="main"]/div[2]/div[2]/table/tr[@class="tr-bd"]')
-   #            opts['logger'].debug('Count of fetched order data: %d', len(elems))
-   #            Order_data.extend(elems)
+        #    if len(Order_data) != N['服务评价']:
+        #        opts['logger'].debug(
+        #            'Count of fetched order data doesn\'t equal N["服务评价"]')
+        #        opts['logger'].debug('Clear the list Order_data')
+        #        Order_data = []
+        #        opts['logger'].debug('Total loop times: %d', loop_times)
+        #        for idx, i in enumerate(req_et):
+        #            opts['logger'].debug('Loop: %d / %d', idx + 1, loop_times)
+        #            opts['logger'].debug('Fetching order data in another XPath')
+        #            elems = i.xpath(
+        #                '//*[@id="main"]/div[2]/div[2]/table/tr[@class="tr-bd"]')
+        #            opts['logger'].debug('Count of fetched order data: %d', len(elems))
+        #            Order_data.extend(elems)
         opts['logger'].info(f"当前共有{N['服务评价']}个需要服务评价。")
         opts['logger'].debug('Commenting on items')
         for i, Order in enumerate(reversed(Order_data)):
@@ -486,7 +496,7 @@ def Service_rating(N, opts=None):
                 break
             oname = Order.xpath('td[1]/div[1]/div[2]/div/a/text()')[0]
             oid = Order.xpath('td[4]/div/a[1]/@oid')[0]
-            opts['logger'].info(f'\t开始第{i+1}个订单: {oid}')
+            opts['logger'].info(f'\t开始第{i + 1}个订单: {oid}')
             opts['logger'].debug('oid: %s', oid)
             url1 = (f'https://club.jd.com/myJdcomments/insertRestSurvey.action'
                     f'?voteid=145&ruleid={oid}')
@@ -511,13 +521,14 @@ def Service_rating(N, opts=None):
                     opts['logger'].info(f'提交成功！')
             else:
                 opts['logger'].debug('Skipped sending comment request in dry run')
-            #opts['logger'].info("\t " + pj1.text)
+            # opts['logger'].info("\t " + pj1.text)
             opts['logger'].debug('Sleep time (s): %.1f', SERVICE_RATING_SLEEP_SEC)
             time.sleep(SERVICE_RATING_SLEEP_SEC)
             N['服务评价'] -= 1
         return N
     except Exception as e:
-        print (e)
+        print(e)
+
 
 def No(opts=None):
     opts = opts or {}
@@ -531,7 +542,7 @@ def No(opts=None):
 
 def main(opts=None):
     opts = opts or {}
-    #opts['logger'].info("开始京东自动评价！")
+    # opts['logger'].info("开始京东自动评价！")
     N = No(opts)
     opts['logger'].debug('N value after executing No(): %s', N)
     if not N:
@@ -544,11 +555,11 @@ def main(opts=None):
         N = No(opts)
         opts['logger'].debug('N value after executing No(): %s', N)
     if N['待追评'] != 0:
-       opts['logger'].info("2.开始追评！")
-       N = review(N, opts)
-       opts['logger'].debug('N value after executing review(): %s', N)
-       N = No(opts)
-       opts['logger'].debug('N value after executing No(): %s', N)
+        opts['logger'].info("2.开始追评！")
+        N = review(N, opts)
+        opts['logger'].debug('N value after executing review(): %s', N)
+        N = No(opts)
+        opts['logger'].debug('N value after executing No(): %s', N)
     if N['服务评价'] != 0:
         opts['logger'].info('3.开始服务评价')
         N = Service_rating(N, opts)
@@ -597,7 +608,7 @@ if __name__ == '__main__':
     # NOTE: The alignment number should set to 19 considering the style
     # controling characters. When it comes to file logger, the number should
     # set to 8.
-    formatter = StyleFormatter('%(asctime)s %(levelname)-19s %(message)s',"%F %T")
+    formatter = StyleFormatter('%(asctime)s %(levelname)-19s %(message)s', "%F %T")
     rawformatter = StyleFormatter('%(asctime)s %(levelname)-8s %(message)s', use_style=False)
     console = logging.StreamHandler()
     console.setLevel(_logging_level)
@@ -639,18 +650,18 @@ if __name__ == '__main__':
     logger.debug('  SERVICE_RATING_SLEEP_SEC: %s', SERVICE_RATING_SLEEP_SEC)
 
     # parse configurations
-    #logger.debug('Reading the configuration file')
-    #if os.path.exists(USER_CONFIG_PATH):
-        #logger.debug('User configuration file exists')
-        #_cfg_path = USER_CONFIG_PATH
-    #else:
-        #logger.debug('User configuration file doesn\'t exist, fallback to the default one')
-        #_cfg_path = CONFIG_PATH
-   # with open(_cfg_path, 'r', encoding='utf-8') as f:
-        #cfg = yaml.safe_load(f)
-        #print()
-    #logger.debug('Closed the configuration file')
-    #logger.debug('Configurations in Python-dict format: %s', cfg)
+    # logger.debug('Reading the configuration file')
+    # if os.path.exists(USER_CONFIG_PATH):
+    # logger.debug('User configuration file exists')
+    # _cfg_path = USER_CONFIG_PATH
+    # else:
+    # logger.debug('User configuration file doesn\'t exist, fallback to the default one')
+    # _cfg_path = CONFIG_PATH
+    # with open(_cfg_path, 'r', encoding='utf-8') as f:
+    # cfg = yaml.safe_load(f)
+    # print()
+    # logger.debug('Closed the configuration file')
+    # logger.debug('Configurations in Python-dict format: %s', cfg)
     cks = []
     if "PC_COOKIE" in os.environ:
         if len(os.environ["PC_COOKIE"]) > 200:
@@ -659,15 +670,15 @@ if __name__ == '__main__':
             else:
                 cks.append(os.environ["PC_COOKIE"])
         else:
-            logger.info ("CK错误，请确认是否电脑版CK！")
+            logger.info("CK错误，请确认是否电脑版CK！")
             sys.exit(1)
-        logger.info ("已获取环境变量 CK")       
+        logger.info("已获取环境变量 CK")
     else:
         logger.info("没有设置变量PC_COOKIE，请添加电脑端CK到环境变量")
         sys.exit(1)
     try:
         i = 1
-        for ck in cks:        
+        for ck in cks:
             headers = {
                 'cookie': ck.encode("utf-8"),
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.82 Safari/537.36',
@@ -689,7 +700,7 @@ if __name__ == '__main__':
             }
             logger.debug('Builtin HTTP request header: %s', headers)
             logger.debug('Starting main processes')
-            print ('\n开始第 '+ str(i) +'个账号评价。。。\n')
+            print('\n开始第 ' + str(i) + '个账号评价。。。\n')
             main(opts)
             i += 1
     # NOTE: It needs 3,000 times to raise this exception. Do you really want to
