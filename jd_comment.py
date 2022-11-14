@@ -199,7 +199,7 @@ def get_all_evaluate(opts=None):
             all_comment[na] = int(num)
         return all_comment
     except Exception as e:
-        print(e)
+        print(e, traceback.format_exc())
 
 
 # 评价晒单
@@ -275,7 +275,7 @@ def comment_and_share_order(all_comment, opts=None):
                     pid = pid_match[0]
                 else:
                     pid = pid.replace('//item.jd.com/', '').replace('.html', '')
-                opts['logger'].info(f'\t开始第{i + 1}个订单: {oid}')
+                opts['logger'].info(f'\t开始第{index_order + 1}个订单: {oid}')
                 opts['logger'].debug('pid: %s', pid)
                 opts['logger'].debug('oid: %s', oid)
                 start_info, comment_info = generation_comment(oname, opts=opts)
@@ -351,7 +351,7 @@ def comment_and_share_order(all_comment, opts=None):
         all_comment['待评价订单'] -= 1
         return all_comment
     except Exception as e:
-        print(e)
+        print(e, traceback.format_exc())
 
 
 # 追评
@@ -440,7 +440,7 @@ def review(all_comment, opts=None):
             all_comment['待追评'] -= 1
         return all_comment
     except Exception as e:
-        print(e)
+        print(e, traceback.format_exc())
 
 
 # 服务评价
@@ -527,7 +527,7 @@ def service_rating(all_comment, opts=None):
             all_comment['服务评价'] -= 1
         return all_comment
     except Exception as e:
-        print(e)
+        print(e, traceback.format_exc())
 
 
 def get_all_comment(opts=None):
@@ -550,7 +550,7 @@ def main(opts=None):
         return
     if all_comment['待评价订单'] != 0:
         opts['logger'].info("1.开始评价晒单")
-        all_comment = commentt_and_share_order(all_comment, opts)
+        all_comment = comment_and_share_order(all_comment, opts)
         opts['logger'].debug('all_comment value after executing comment_and_share_order(): %s', all_comment)
         all_comment = get_all_comment(opts)
         opts['logger'].debug('all_comment value after executing get_all_comment(): %s', all_comment)
