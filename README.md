@@ -1,5 +1,9 @@
 # auto_comment
 
+## 已不可用，停止维护（2024/09/03)
+
+可用[项目](https://github.com/6dylan6/jdpro)下的评价(jd_AutoEval.js)；
+
 ## JD自动评价
 
 支持评价晒单（带两张图），追评，服务评价，支持AI生成评价内容
